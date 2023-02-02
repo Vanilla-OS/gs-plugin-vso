@@ -21,6 +21,8 @@ G_DEFINE_TYPE(GsPluginVso, gs_plugin_vso, GS_TYPE_PLUGIN)
 
 #define assert_in_worker(self) g_assert(gs_worker_thread_is_in_worker_context(self->worker))
 
+const gchar *lock_path = "/tmp/abroot-transactions.lock";
+
 static void
 gs_plugin_vso_dispose(GObject *object)
 {
@@ -110,6 +112,58 @@ gs_plugin_add_updates_historical(GsPlugin *plugin,
                                  GCancellable *cancellable,
                                  GError **error)
 {
+    return TRUE;
+}
+
+gboolean
+gs_plugin_update(GsPlugin *plugin, GsAppList *list, GCancellable *cancellable, GError **error)
+{
+    gboolean ours = false;
+    for (guint i = 0; i < gs_app_list_length(list); i++) {
+        GsApp *app = gs_app_list_index(list, i);
+        if (gs_app_has_management_plugin(app, plugin)) {
+            ours = true;
+            break;
+        }
+    }
+
+    // Nothing to do with us...
+    if (!ours)
+        return TRUE;
+
+    // Cannot update if transactions are locked
+    g_autoptr(GFile) lock_file    = g_file_new_for_path(lock_path);
+    g_autoptr(GError) local_error = NULL;
+    if (g_file_query_exists(lock_file, cancellable)) {
+
+        g_set_error_literal(&local_error, GS_PLUGIN_ERROR, GS_PLUGIN_ERROR_FAILED,
+                            "Another transaction has already been executed, you must reboot your "
+                            "system before starting a new transaction.");
+        *error = g_steal_pointer(&local_error);
+
+        return FALSE;
+    }
+
+    // Call trigger-update
+    const gchar *cmd = "pkexec vso trigger-update --now";
+
+    g_autoptr(GSubprocess) subprocess = NULL;
+    guint exit_status                 = -1;
+
+    subprocess = g_subprocess_new(G_SUBPROCESS_FLAGS_NONE, error, "sh", "-c", cmd, NULL);
+    if (!g_subprocess_wait(subprocess, cancellable, error))
+        return FALSE;
+
+    exit_status = g_subprocess_get_exit_status(subprocess);
+
+    if (exit_status != EXIT_SUCCESS) {
+        g_set_error_literal(&local_error, GS_PLUGIN_ERROR, GS_PLUGIN_ERROR_FAILED,
+                            "VSO failed to update the system, please try again later.");
+        *error = g_steal_pointer(&local_error);
+
+        return FALSE;
+    }
+
     return TRUE;
 }
 
