@@ -1,0 +1,10 @@
+---
+BasedOnStyle: LLVM
+IndentWidth: 4
+AlignAfterOpenBracket: Align
+AlignConsecutiveAssignments: Consecutive
+BreakBeforeBraces: Linux
+BinPackParameters: false
+AlwaysBreakAfterReturnType: AllDefinitions
+ColumnLimit: 100
+...
