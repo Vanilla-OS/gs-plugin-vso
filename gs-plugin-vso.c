@@ -96,6 +96,9 @@ gs_plugin_adopt_app(GsPlugin *plugin, GsApp *app)
         g_debug("I should adopt app %s", gs_app_get_name(app));
         gs_app_set_management_plugin(app, plugin);
         gs_app_add_quirk(app, GS_APP_QUIRK_PROVENANCE);
+        // FIXME: Appinfo for pre-installed apps have no indidation of what is the package
+        // name, so we have no way of knowing how to uninstall them.
+        gs_app_add_quirk(app, GS_APP_QUIRK_COMPULSORY);
         gs_app_set_scope(app, AS_COMPONENT_SCOPE_SYSTEM);
 
         gs_app_set_metadata(app, "GnomeSoftware::SortKey", "200");
