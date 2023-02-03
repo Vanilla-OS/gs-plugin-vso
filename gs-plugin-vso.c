@@ -11,6 +11,10 @@
 static gint get_priority_for_interactivity(gboolean interactive);
 static void
 setup_thread_cb(GTask *task, gpointer source_object, gpointer task_data, GCancellable *cancellable);
+static void list_apps_thread_cb(GTask *task,
+                                gpointer source_object,
+                                gpointer task_data,
+                                GCancellable *cancellable);
 
 struct _GsPluginVso {
     GsPlugin parent;
@@ -81,6 +85,94 @@ gs_plugin_vso_init(GsPluginVso *self)
     GsPlugin *plugin = GS_PLUGIN(self);
 
     gs_plugin_add_rule(plugin, GS_PLUGIN_RULE_RUN_AFTER, "appstream");
+}
+
+void
+gs_plugin_adopt_app(GsPlugin *plugin, GsApp *app)
+{
+    if (gs_app_get_kind(app) == AS_COMPONENT_KIND_DESKTOP_APP &&
+        gs_app_has_management_plugin(app, NULL)) {
+
+        g_debug("I should adopt app %s", gs_app_get_name(app));
+        gs_app_set_management_plugin(app, plugin);
+        gs_app_add_quirk(app, GS_APP_QUIRK_PROVENANCE);
+        gs_app_set_scope(app, AS_COMPONENT_SCOPE_SYSTEM);
+
+        gs_app_set_metadata(app, "GnomeSoftware::SortKey", "200");
+        gs_app_set_metadata(app, "GnomeSoftware::PackagingBaseCssColor", "error_color");
+        gs_app_set_metadata(app, "GnomeSoftware::PackagingIcon",
+                            "org.vanillaos.FirstSetup-symbolic");
+
+        gs_app_set_metadata(app, "GnomeSoftware::PackagingFormat", "base");
+
+        gs_app_set_origin(app, "vso");
+        gs_app_set_origin_ui(app, "Vanilla OS Base");
+        gs_app_set_origin_hostname(app, "https://vanillaos.org");
+
+        if (gs_plugin_cache_lookup(plugin, gs_app_get_id(app)) == NULL) {
+            gs_plugin_cache_add(plugin, gs_app_get_id(app), app);
+        }
+    }
+}
+
+static void
+gs_plugin_vso_list_apps_async(GsPlugin *plugin,
+                              GsAppQuery *query,
+                              GsPluginListAppsFlags flags,
+                              GCancellable *cancellable,
+                              GAsyncReadyCallback callback,
+                              gpointer user_data)
+{
+    GsPluginVso *self     = GS_PLUGIN_VSO(plugin);
+    g_autoptr(GTask) task = NULL;
+    gboolean interactive  = (flags & GS_PLUGIN_LIST_APPS_FLAGS_INTERACTIVE);
+
+    task =
+        gs_plugin_list_apps_data_new_task(plugin, query, flags, cancellable, callback, user_data);
+    g_task_set_source_tag(task, gs_plugin_vso_list_apps_async);
+
+    /* Queue a job to get the apps. */
+    gs_worker_thread_queue(self->worker, get_priority_for_interactivity(interactive),
+                           list_apps_thread_cb, g_steal_pointer(&task));
+}
+
+static void
+list_apps_thread_cb(GTask *task,
+                    gpointer source_object,
+                    gpointer task_data,
+                    GCancellable *cancellable)
+{
+    GsPluginVso *self          = GS_PLUGIN_VSO(source_object);
+    g_autoptr(GsAppList) list  = gs_app_list_new();
+    GsPluginListAppsData *data = task_data;
+    GsApp *alternate_of        = NULL;
+
+    assert_in_worker(self);
+
+    if (data->query != NULL) {
+        alternate_of = gs_app_query_get_alternate_of(data->query);
+    }
+
+    if (alternate_of != NULL) {
+        GsApp *app = gs_plugin_cache_lookup(GS_PLUGIN(self), gs_app_get_id(alternate_of));
+
+        gs_app_set_origin(app, "vso");
+        gs_app_set_origin_ui(app, "Vanilla OS Base");
+        gs_app_set_origin_hostname(app, "https://vanillaos.org");
+
+        if (app != NULL)
+            gs_app_list_add(list, app);
+    }
+
+    g_task_return_pointer(task, g_steal_pointer(&list), g_object_unref);
+}
+
+static GsAppList *
+gs_plugin_vso_list_apps_finish(GsPlugin *plugin, GAsyncResult *result, GError **error)
+{
+    g_return_val_if_fail(g_task_get_source_tag(G_TASK(result)) == gs_plugin_vso_list_apps_async,
+                         FALSE);
+    return g_task_propagate_pointer(G_TASK(result), error);
 }
 
 static gboolean
@@ -253,8 +345,10 @@ gs_plugin_vso_class_init(GsPluginVsoClass *klass)
     object_class->dispose  = gs_plugin_vso_dispose;
     object_class->finalize = gs_plugin_vso_finalize;
 
-    plugin_class->setup_async  = gs_plugin_vso_setup_async;
-    plugin_class->setup_finish = gs_plugin_vso_setup_finish;
+    plugin_class->setup_async      = gs_plugin_vso_setup_async;
+    plugin_class->setup_finish     = gs_plugin_vso_setup_finish;
+    plugin_class->list_apps_async  = gs_plugin_vso_list_apps_async;
+    plugin_class->list_apps_finish = gs_plugin_vso_list_apps_finish;
 }
 
 GType
