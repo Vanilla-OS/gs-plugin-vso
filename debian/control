@@ -1,0 +1,22 @@
+Source: libgs-plugin-vso
+Section: devel
+Priority: extra
+Maintainer: Mateus Melchiades <mateusbmelchiades@gmail.com>
+Uploaders: Mateus Melchiades <mateusbmelchiades@gmail.com>
+Build-Depends: mason,
+               gnome-software-dev,
+               libglib2.0-dev,
+               libxmlb-dev
+Standards-Version: 3.9.6
+Homepage: https://github.com/Vanilla-OS/gs-plugin-vso
+Vcs-Browser: https://github.com/Vanilla-OS/gs-plugin-vso
+Vcs-Git: git://github.com/Vanilla-OS/gs-plugin-vso.git
+
+Package: libgs-plugin-vso
+Architecture: all
+Depends: ${shlibs:Depends},
+         ${misc:Depends},
+         gnome-software,
+         vanilla-system-operator
+Built-Using: ${misc:Built-Using}
+Description: Gnome Software plugin for handling updates inside gnome-software for Vanilla OS.
