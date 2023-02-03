@@ -121,7 +121,7 @@ gs_plugin_update(GsPlugin *plugin, GsAppList *list, GCancellable *cancellable, G
     gboolean ours = false;
     for (guint i = 0; i < gs_app_list_length(list); i++) {
         GsApp *app = gs_app_list_index(list, i);
-        if (gs_app_has_management_plugin(app, plugin)) {
+        if (!g_strcmp0(gs_app_get_id(app), "org.gnome.Software.OsUpdate")) {
             ours = true;
             break;
         }
@@ -129,7 +129,7 @@ gs_plugin_update(GsPlugin *plugin, GsAppList *list, GCancellable *cancellable, G
 
     // Nothing to do with us...
     if (!ours)
-        return TRUE;
+        return FALSE;
 
     // Cannot update if transactions are locked
     g_autoptr(GFile) lock_file    = g_file_new_for_path(lock_path);
