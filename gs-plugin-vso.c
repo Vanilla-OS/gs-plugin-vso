@@ -102,11 +102,11 @@ gs_plugin_adopt_app(GsPlugin *plugin, GsApp *app)
         gs_app_set_scope(app, AS_COMPONENT_SCOPE_SYSTEM);
 
         gs_app_set_metadata(app, "GnomeSoftware::SortKey", "200");
-        gs_app_set_metadata(app, "GnomeSoftware::PackagingBaseCssColor", "error_color");
+        gs_app_set_metadata(app, "GnomeSoftware::PackagingBaseCssColor", "warning_color");
         gs_app_set_metadata(app, "GnomeSoftware::PackagingIcon",
                             "org.vanillaos.FirstSetup-symbolic");
 
-        gs_app_set_metadata(app, "GnomeSoftware::PackagingFormat", "base");
+        gs_app_set_metadata(app, "GnomeSoftware::PackagingFormat", "System");
 
         gs_app_set_origin(app, "vso");
         gs_app_set_origin_ui(app, "Vanilla OS Base");
@@ -240,7 +240,7 @@ gs_plugin_update(GsPlugin *plugin, GsAppList *list, GCancellable *cancellable, G
     }
 
     // Call trigger-update
-    const gchar *cmd = "pkexec vso trigger-update --now";
+    const gchar *cmd = "pkexec vso sys-upgrade upgrade";
 
     g_autoptr(GSubprocess) subprocess = NULL;
     guint exit_status                 = -1;
@@ -265,7 +265,7 @@ gs_plugin_update(GsPlugin *plugin, GsAppList *list, GCancellable *cancellable, G
 gboolean
 gs_plugin_add_updates(GsPlugin *plugin, GsAppList *list, GCancellable *cancellable, GError **error)
 {
-    const gchar *cmd              = "pkexec vso update-check";
+    const gchar *cmd              = "pkexec vso sys-upgrade check";
     g_autoptr(GError) local_error = NULL;
 
     g_autoptr(GSubprocess) subprocess = NULL;
