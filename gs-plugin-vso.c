@@ -27,7 +27,7 @@ G_DEFINE_TYPE(GsPluginVso, gs_plugin_vso, GS_TYPE_PLUGIN)
 
 #define assert_in_worker(self) g_assert(gs_worker_thread_is_in_worker_context(self->worker))
 
-const gchar *lock_path = "/tmp/abroot-transactions.lock";
+const gchar *lock_path = "/tmp/ABSystem.Upgrade.lock";
 
 static void
 gs_plugin_vso_dispose(GObject *object)
@@ -275,22 +275,19 @@ add_package(JsonArray *array, guint index_, JsonNode *element_node, gpointer use
     const gchar *name        = NULL;
     const gchar *old_version = NULL;
     const gchar *new_version = NULL;
-    gboolean has_name, has_old_version, has_new_version;
 
-    if ((has_name = json_object_has_member(pkg_info, "name")))
+    if (json_object_has_member(pkg_info, "name"))
         name = json_object_get_string_member(pkg_info, "name");
     else
         name = "";
 
-    if ((has_old_version = json_object_has_member(pkg_info, "old_version")))
-        old_version = json_object_get_string_member(pkg_info, "old_version");
-    else
-        old_version = "";
+    if (json_object_has_member(pkg_info, "previous_version"))
+        old_version = json_object_get_string_member(pkg_info, "previous_version");
 
-    if ((has_new_version = json_object_has_member(pkg_info, "new_version")))
+    if (json_object_has_member(pkg_info, "new_version"))
         new_version = json_object_get_string_member(pkg_info, "new_version");
-    else
-        new_version = "";
+
+    g_debug("Adding package %s: %s -> %s", name, old_version, new_version);
 
     g_autoptr(GsApp) app = gs_app_new(NULL);
     gs_app_set_management_plugin(app, plugin);
@@ -300,20 +297,27 @@ add_package(JsonArray *array, guint index_, JsonNode *element_node, gpointer use
     gs_app_set_kind(app, AS_COMPONENT_KIND_GENERIC);
     gs_app_set_size_download(app, GS_SIZE_TYPE_VALID, 0);
     gs_app_add_source(app, g_strdup(name));
-    gs_app_set_version(app, g_strdup(old_version));
-    gs_app_set_update_version(app, g_strdup(new_version));
-    gs_app_set_state(app, GS_APP_STATE_UPDATABLE);
+
+    if (old_version == NULL)
+        gs_app_set_version(app, "");
+    else
+        gs_app_set_version(app, g_strdup(old_version));
+    if (new_version == NULL)
+        gs_app_set_update_version(app, "");
+    else
+        gs_app_set_update_version(app, g_strdup(new_version));
+
+    if (old_version != NULL && new_version != NULL)
+        gs_app_set_state(app, GS_APP_STATE_UPDATABLE);
+    else if (old_version == NULL && new_version != NULL)
+        gs_app_set_state(app, GS_APP_STATE_AVAILABLE);
+    else if (old_version != NULL && new_version == NULL)
+        gs_app_set_state(app, GS_APP_STATE_UNAVAILABLE);
+    else
+        gs_app_set_state(app, GS_APP_STATE_UNKNOWN);
 
     gs_plugin_cache_add(plugin, name, app);
     gs_app_list_add(list, app);
-
-    // Free version strings if allocated by us
-    if (!has_name)
-        g_free(&name);
-    if (!has_old_version)
-        g_free(&old_version);
-    if (!has_new_version)
-        g_free(&new_version);
 }
 
 gboolean
