@@ -17,7 +17,7 @@ jobs:
       - name: Install dependencies
         run: |
           apt-get update
-          apt-get install -y gnome-software-dev meson
+          apt-get install -y gnome-software gnome-software-common gnome-software-dev meson
 
       - name: Build
         run: |
