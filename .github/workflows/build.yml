@@ -17,7 +17,7 @@ jobs:
       - name: Install dependencies
         run: |
           apt-get update
-          apt-get install gnome-software-dev
+          apt-get install -y gnome-software-dev
 
       - name: Build
         run: |
