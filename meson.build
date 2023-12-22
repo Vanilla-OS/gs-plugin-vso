@@ -6,6 +6,7 @@ files = [
 
 deps = [
   dependency('glib-2.0', version : '>= 2.70.0'),
+  dependency('json-glib-1.0', version : '>= 1.6.0'),
   dependency('gnome-software'),
   dependency('polkit-gobject-1')
 ]

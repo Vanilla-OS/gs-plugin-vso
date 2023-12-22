@@ -4,6 +4,7 @@
 
 #include <glib.h>
 #include <gnome-software.h>
+#include <json-glib/json-glib.h>
 #include <stdlib.h>
 
 #include "gs-plugin-vso.h"
@@ -15,6 +16,7 @@ static void list_apps_thread_cb(GTask *task,
                                 gpointer source_object,
                                 gpointer task_data,
                                 GCancellable *cancellable);
+void add_package(JsonArray *array, guint index_, JsonNode *element_node, gpointer user_data);
 
 struct _GsPluginVso {
     GsPlugin parent;
@@ -262,11 +264,62 @@ gs_plugin_update(GsPlugin *plugin, GsAppList *list, GCancellable *cancellable, G
     return TRUE;
 }
 
+void
+add_package(JsonArray *array, guint index_, JsonNode *element_node, gpointer user_data)
+{
+    GsPluginPkgAddFuncData *data = user_data;
+    GsPlugin *plugin             = data->plugin;
+    GsAppList *list              = data->list;
+
+    JsonObject *pkg_info     = json_node_get_object(element_node);
+    const gchar *name        = NULL;
+    const gchar *old_version = NULL;
+    const gchar *new_version = NULL;
+    gboolean has_name, has_old_version, has_new_version;
+
+    if ((has_name = json_object_has_member(pkg_info, "name")))
+        name = json_object_get_string_member(pkg_info, "name");
+    else
+        name = "";
+
+    if ((has_old_version = json_object_has_member(pkg_info, "old_version")))
+        old_version = json_object_get_string_member(pkg_info, "old_version");
+    else
+        old_version = "";
+
+    if ((has_new_version = json_object_has_member(pkg_info, "new_version")))
+        new_version = json_object_get_string_member(pkg_info, "new_version");
+    else
+        new_version = "";
+
+    g_autoptr(GsApp) app = gs_app_new(NULL);
+    gs_app_set_management_plugin(app, plugin);
+    gs_app_add_quirk(app, GS_APP_QUIRK_NEEDS_REBOOT);
+    gs_app_set_scope(app, AS_COMPONENT_SCOPE_SYSTEM);
+    gs_app_set_bundle_kind(app, AS_BUNDLE_KIND_PACKAGE);
+    gs_app_set_kind(app, AS_COMPONENT_KIND_GENERIC);
+    gs_app_set_size_download(app, GS_SIZE_TYPE_VALID, 0);
+    gs_app_add_source(app, g_strdup(name));
+    gs_app_set_version(app, g_strdup(old_version));
+    gs_app_set_update_version(app, g_strdup(new_version));
+    gs_app_set_state(app, GS_APP_STATE_UPDATABLE);
+
+    gs_plugin_cache_add(plugin, name, app);
+    gs_app_list_add(list, app);
+
+    // Free version strings if allocated by us
+    if (!has_name)
+        g_free(&name);
+    if (!has_old_version)
+        g_free(&old_version);
+    if (!has_new_version)
+        g_free(&new_version);
+}
+
 gboolean
 gs_plugin_add_updates(GsPlugin *plugin, GsAppList *list, GCancellable *cancellable, GError **error)
 {
-    const gchar *cmd              = "pkexec vso sys-upgrade check";
-    g_autoptr(GError) local_error = NULL;
+    const gchar *cmd = "pkexec vso sys-upgrade check --json";
 
     g_autoptr(GSubprocess) subprocess = NULL;
     GInputStream *input_stream;
@@ -278,7 +331,7 @@ gs_plugin_add_updates(GsPlugin *plugin, GsAppList *list, GCancellable *cancellab
     input_stream = g_subprocess_get_stdout_pipe(subprocess);
 
     if (input_stream != NULL) {
-        g_autoptr(GByteArray) ls_out = g_byte_array_new();
+        g_autoptr(GByteArray) cmd_out = g_byte_array_new();
         gchar buffer[4096];
         gsize nread = 0;
         gboolean success;
@@ -289,49 +342,60 @@ gs_plugin_add_updates(GsPlugin *plugin, GsAppList *list, GCancellable *cancellab
         while (success = g_input_stream_read_all(input_stream, buffer, sizeof(buffer), &nread,
                                                  cancellable, error),
                success && nread > 0) {
-            g_byte_array_append(ls_out, (const guint8 *)buffer, nread);
-        }
-
-        if (local_error != NULL) {
-            g_debug("Error checking for updates: %s", local_error->message);
-            return FALSE;
+            g_byte_array_append(cmd_out, (const guint8 *)buffer, nread);
         }
 
         // If we have a valid output
-        if (success && ls_out->len > 0) {
+        if (success && cmd_out->len > 0) {
             // NUL-terminate the array, to use it as a string
-            g_byte_array_append(ls_out, (const guint8 *)"", 1);
+            g_byte_array_append(cmd_out, (const guint8 *)"", 1);
+            g_debug("Got JSON: %s", cmd_out->data);
 
-            splits = g_strsplit((gchar *)ls_out->data, "\n", -1);
+            splits = g_strsplit((gchar *)cmd_out->data, "\n", -1);
 
-            // Format: "  - %s\t%s -> %s", pkg_name, pkg_oldver, pkg_newver
-            for (guint i = 0; i < g_strv_length(splits); i++) {
-                if (g_str_has_prefix(splits[i], "  - ")) {
-                    gchar *split_no_prefix = &splits[i][4];
-
-                    pkg_splits   = g_strsplit(split_no_prefix, "\t", 2);
-                    pkg_versions = g_strsplit(pkg_splits[1], " -> ", 2);
-
-                    g_debug("Package: %s", pkg_splits[0]);
-                    g_debug("Old ver: %s", pkg_versions[0]);
-                    g_debug("New ver: %s", pkg_versions[1]);
-
-                    g_autoptr(GsApp) app = gs_app_new(NULL);
-                    gs_app_set_management_plugin(app, plugin);
-                    gs_app_add_quirk(app, GS_APP_QUIRK_NEEDS_REBOOT);
-                    gs_app_set_scope(app, AS_COMPONENT_SCOPE_SYSTEM);
-                    gs_app_set_bundle_kind(app, AS_BUNDLE_KIND_PACKAGE);
-                    gs_app_set_kind(app, AS_COMPONENT_KIND_GENERIC);
-                    gs_app_set_size_download(app, GS_SIZE_TYPE_VALID, 0);
-                    gs_app_add_source(app, g_strdup(pkg_splits[0]));
-                    gs_app_set_version(app, g_strdup(pkg_versions[0]));
-                    gs_app_set_update_version(app, g_strdup(pkg_versions[1]));
-                    gs_app_set_state(app, GS_APP_STATE_UPDATABLE);
-
-                    gs_plugin_cache_add(plugin, pkg_splits[0], app);
-                    gs_app_list_add(list, app);
-                }
+            JsonNode *output_json = json_from_string(splits[g_strv_length(splits) - 2], error);
+            if (output_json == NULL) {
+                g_debug("Error checking update check JSON: %s", (*error)->message);
+                return FALSE;
             }
+
+            JsonObject *update_info = json_node_get_object(output_json);
+            if (!json_object_get_boolean_member(update_info, "hasUpdate")) {
+                g_debug("No updates");
+                json_node_free(output_json);
+                return TRUE;
+            }
+
+            g_debug("New image digest: %s",
+                    json_object_get_string_member(update_info, "newDigest"));
+
+            GsPluginPkgAddFuncData data = {plugin = plugin, list = list};
+
+            // Parse image packages
+            JsonObject *system_pkgs =
+                json_object_get_object_member(update_info, "systemPackageDiff");
+            json_array_foreach_element(json_object_get_array_member(system_pkgs, "added"),
+                                       add_package, &data);
+            json_array_foreach_element(json_object_get_array_member(system_pkgs, "upgraded"),
+                                       add_package, &data);
+            json_array_foreach_element(json_object_get_array_member(system_pkgs, "downgraded"),
+                                       add_package, &data);
+            json_array_foreach_element(json_object_get_array_member(system_pkgs, "removed"),
+                                       add_package, &data);
+
+            // Parse overlay packages
+            JsonObject *user_pkgs =
+                json_object_get_object_member(update_info, "overlayPackageDiff");
+            json_array_foreach_element(json_object_get_array_member(user_pkgs, "added"),
+                                       add_package, &data);
+            json_array_foreach_element(json_object_get_array_member(user_pkgs, "upgraded"),
+                                       add_package, &data);
+            json_array_foreach_element(json_object_get_array_member(user_pkgs, "downgraded"),
+                                       add_package, &data);
+            json_array_foreach_element(json_object_get_array_member(user_pkgs, "removed"),
+                                       add_package, &data);
+
+            json_node_free(output_json);
         }
     }
 
