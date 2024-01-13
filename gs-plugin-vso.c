@@ -232,7 +232,6 @@ gs_plugin_update(GsPlugin *plugin, GsAppList *list, GCancellable *cancellable, G
     g_autoptr(GFile) lock_file    = g_file_new_for_path(lock_path);
     g_autoptr(GError) local_error = NULL;
     if (g_file_query_exists(lock_file, cancellable)) {
-
         g_set_error_literal(&local_error, GS_PLUGIN_ERROR, GS_PLUGIN_ERROR_FAILED,
                             "Another transaction has already been executed, you must reboot your "
                             "system before starting a new transaction.");
@@ -359,7 +358,9 @@ gs_plugin_add_updates(GsPlugin *plugin, GsAppList *list, GCancellable *cancellab
 
             JsonNode *output_json = json_from_string(splits[g_strv_length(splits) - 2], error);
             if (output_json == NULL) {
-                g_debug("Error checking update check JSON: %s", (*error)->message);
+                (*error)->message = g_strconcat(
+                    "Error parsing VSO upgrade-check output: ", (*error)->message, NULL);
+                g_debug((*error)->message);
                 return FALSE;
             }
 
