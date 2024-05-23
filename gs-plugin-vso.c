@@ -86,6 +86,7 @@ gs_plugin_vso_init(GsPluginVso *self)
 {
     GsPlugin *plugin = GS_PLUGIN(self);
 
+    gs_plugin_add_rule(plugin, GS_PLUGIN_RULE_RUN_BEFORE, "os-release");
     gs_plugin_add_rule(plugin, GS_PLUGIN_RULE_RUN_AFTER, "appstream");
 }
 
@@ -95,7 +96,6 @@ gs_plugin_adopt_app(GsPlugin *plugin, GsApp *app)
     if (gs_app_get_kind(app) == AS_COMPONENT_KIND_DESKTOP_APP &&
         gs_app_has_management_plugin(app, NULL)) {
 
-        g_debug("I should adopt app %s", gs_app_get_name(app));
         gs_app_set_management_plugin(app, plugin);
         gs_app_add_quirk(app, GS_APP_QUIRK_PROVENANCE);
         // FIXME: Appinfo for pre-installed apps have no indidation of what is the package
@@ -291,29 +291,24 @@ add_package(JsonArray *array, guint index_, JsonNode *element_node, gpointer use
     g_autoptr(GsApp) app = gs_app_new(NULL);
     gs_app_set_management_plugin(app, plugin);
     gs_app_add_quirk(app, GS_APP_QUIRK_NEEDS_REBOOT);
-    gs_app_set_scope(app, AS_COMPONENT_SCOPE_SYSTEM);
     gs_app_set_bundle_kind(app, AS_BUNDLE_KIND_PACKAGE);
+    gs_app_set_scope(app, AS_COMPONENT_SCOPE_SYSTEM);
     gs_app_set_kind(app, AS_COMPONENT_KIND_GENERIC);
-    gs_app_set_size_download(app, GS_SIZE_TYPE_VALID, 0);
+    gs_app_set_size_download(app, GS_SIZE_TYPE_UNKNOWN, 0);
     gs_app_add_source(app, g_strdup(name));
+    gs_app_set_name(app, GS_APP_QUALITY_LOWEST, g_strdup(name));
 
-    if (old_version == NULL)
-        gs_app_set_version(app, "");
-    else
+    if (old_version != NULL && new_version == NULL) { // Removed
         gs_app_set_version(app, g_strdup(old_version));
-    if (new_version == NULL)
-        gs_app_set_update_version(app, "");
-    else
-        gs_app_set_update_version(app, g_strdup(new_version));
-
-    if (old_version != NULL && new_version != NULL)
-        gs_app_set_state(app, GS_APP_STATE_UPDATABLE);
-    else if (old_version == NULL && new_version != NULL)
-        gs_app_set_state(app, GS_APP_STATE_AVAILABLE);
-    else if (old_version != NULL && new_version == NULL)
         gs_app_set_state(app, GS_APP_STATE_UNAVAILABLE);
-    else
-        gs_app_set_state(app, GS_APP_STATE_UNKNOWN);
+    } else if (old_version == NULL && new_version != NULL) { // Added
+        gs_app_set_version(app, g_strdup(new_version));
+        gs_app_set_state(app, GS_APP_STATE_AVAILABLE);
+    } else { // Modified
+        gs_app_set_version(app, g_strdup(old_version));
+        gs_app_set_update_version(app, g_strdup(new_version));
+        gs_app_set_state(app, GS_APP_STATE_UPDATABLE);
+    }
 
     gs_plugin_cache_add(plugin, name, app);
     gs_app_list_add(list, app);
@@ -360,7 +355,7 @@ gs_plugin_add_updates(GsPlugin *plugin, GsAppList *list, GCancellable *cancellab
             if (output_json == NULL) {
                 (*error)->message = g_strconcat(
                     "Error parsing VSO upgrade-check output: ", (*error)->message, NULL);
-                g_debug((*error)->message);
+                g_debug("%s", (*error)->message);
                 return FALSE;
             }
 
@@ -374,7 +369,7 @@ gs_plugin_add_updates(GsPlugin *plugin, GsAppList *list, GCancellable *cancellab
             g_debug("New image digest: %s",
                     json_object_get_string_member(update_info, "newDigest"));
 
-            GsPluginPkgAddFuncData data = {plugin = plugin, list = list};
+            GsPluginPkgAddFuncData data = {.plugin = plugin, .list = list};
 
             // Parse image packages
             JsonObject *system_pkgs =
