@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2023 Mateus Melchiades
+ * Copyright (C) 2024 Mateus Melchiades
  */
 
 #include <glib.h>

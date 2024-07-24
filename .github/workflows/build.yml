@@ -3,6 +3,7 @@ name: Build
 on:
   push:
     branches: [ "main" ]
+  pull_request:
 
 jobs:
   build:
@@ -23,11 +24,24 @@ jobs:
         run: |
           make
 
-      - uses: softprops/action-gh-release@v1
+      - name: Calculate and Save Checksums
+        run: |
+          sha256sum build/libgs_plugin_vso.so >> checksums.txt
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: gs-plugin-vso
+          path: |
+              checksums.txt
+              build/libgs_plugin_vso.so
+
+      - uses: softprops/action-gh-release@v2
+        if: github.ref == 'refs/heads/main'
         with:
           token: "${{ secrets.GITHUB_TOKEN }}"
           tag_name: "continuous"
           prerelease: true
           name: "Continuous Build"
           files: |
+            checksums.txt
             build/libgs_plugin_vso.so

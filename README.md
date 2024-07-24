@@ -2,13 +2,11 @@
 
 This plugin provides graphical updates inside gnome-software for Vanilla OS.
 
-
 ## Dependencies
 
-- meson
-- gnome-software-dev
-- libglib2.0-dev
-
+- `meson`
+- `gnome-software-dev`
+- `libglib2.0-dev`
 
 ## Building
 
