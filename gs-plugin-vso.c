@@ -193,14 +193,14 @@ plugin_vso_pick_desktop_file_cb(GsPlugin *plugin,
            !g_key_file_has_key(key_file, "Desktop Entry", "X-SnapInstanceName", NULL);
 }
 
-gboolean
-gs_plugin_launch(GsPlugin *plugin, GsApp *app, GCancellable *cancellable, GError **error)
+void
+gs_plugin_launch(GsPlugin *plugin, GsApp *app, GsPluginLaunchFlags flags, GsPluginPickDesktopFileCallback cb, gpointer cb_user_data, GCancellable *cancellable, GAsyncReadyCallback callback, gpointer user_data)
 {
     /* only process this app if was created by this plugin */
     if (!gs_app_has_management_plugin(app, plugin))
-        return TRUE;
+        return;
 
-    return gs_plugin_app_launch_filtered(plugin, app, plugin_vso_pick_desktop_file_cb, NULL, error);
+    gs_plugin_app_launch_filtered_async(plugin, app, flags, cb, cb_user_data, cancellable, callback, user_data);
 }
 
 gboolean
