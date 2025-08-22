@@ -18,23 +18,28 @@ jobs:
 
       - name: Install dependencies
         run: |
-          apt-get update
-          apt-get install -y gnome-software gnome-software-common gnome-software-dev meson
+          dpkg --add-architecture arm64
+          apt update
+          apt install -y gnome-software gnome-software-dev meson gcc-aarch64-linux-gnu
 
       - name: Build
         run: |
           make
+          mv build/libgs_plugin_vso.so libgs_plugin_vso_amd64.so
+          make clean
+          apt -o Dpkg::Options::="--force-overwrite" install -y gnome-software:arm64 gnome-software-dev:arm64
+          make all-arm64
+          mv build/libgs_plugin_vso.so libgs_plugin_vso_arm64.so
 
       - name: Calculate and Save Checksums
-        run: |
-          sha256sum build/libgs_plugin_vso.so >> checksums.txt
+        run: sha256sum libgs_plugin_vso*.so >> checksums.txt
 
       - uses: actions/upload-artifact@v4
         with:
           name: gs-plugin-vso
           path: |
               checksums.txt
-              build/libgs_plugin_vso.so
+              libgs_plugin_vso*.so
 
       - uses: softprops/action-gh-release@v2
         if: github.ref == 'refs/heads/main'
@@ -45,4 +50,4 @@ jobs:
           name: "Continuous Build"
           files: |
             checksums.txt
-            build/libgs_plugin_vso.so
+            libgs_plugin_vso*.so
