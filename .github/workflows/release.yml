@@ -10,7 +10,7 @@ jobs:
     name: Build .so
     runs-on: ubuntu-latest
     container:
-      image: ghcr.io/vanilla-os/pico:main
+      image: ghcr.io/vanilla-os/pico:dev
     permissions:
       contents: read
 
