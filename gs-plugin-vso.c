@@ -243,7 +243,7 @@ gs_plugin_update(GsPlugin *plugin, GsAppList *list, GCancellable *cancellable, G
     }
 
     // Call trigger-update
-    const gchar *cmd = "pkexec vso sys-upgrade upgrade";
+    const gchar *cmd = "pkexec vso upgrade";
 
     g_autoptr(GSubprocess) subprocess = NULL;
     guint exit_status                 = -1;
@@ -319,7 +319,7 @@ add_package(JsonArray *array, guint index_, JsonNode *element_node, gpointer use
 gboolean
 gs_plugin_add_updates(GsPlugin *plugin, GsAppList *list, GCancellable *cancellable, GError **error)
 {
-    const gchar *cmd = "pkexec vso sys-upgrade check --json";
+    const gchar *cmd = "pkexec vso upgrade check --json";
 
     g_autoptr(GSubprocess) subprocess = NULL;
     GInputStream *input_stream;
